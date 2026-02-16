@@ -8,7 +8,7 @@ struct MenuBarContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Wellness")
-                .font(.headline)
+                .font(.headline.weight(.semibold))
 
             Text(statusText)
                 .font(.subheadline)
@@ -35,6 +35,14 @@ struct MenuBarContentView: View {
         }
         .frame(width: 280)
         .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(.ultraThinMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(Color.white.opacity(0.22), lineWidth: 0.8)
+        )
     }
 
     private var statusText: String {

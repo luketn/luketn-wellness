@@ -38,3 +38,22 @@ enum JournalDateNavigator {
         calendar.startOfDay(for: now())
     }
 }
+
+enum JournalEntryReorder {
+    static func reorderedIDs(_ ids: [UUID], draggedID: UUID, targetID: UUID) -> [UUID]? {
+        guard
+            draggedID != targetID,
+            let fromIndex = ids.firstIndex(of: draggedID),
+            let toIndex = ids.firstIndex(of: targetID)
+        else {
+            return nil
+        }
+
+        var reordered = ids
+        let moved = reordered.remove(at: fromIndex)
+        // Insert at target index in the post-removal array:
+        // this makes downward drags land after the target and upward drags before it.
+        reordered.insert(moved, at: toIndex)
+        return reordered
+    }
+}

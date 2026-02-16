@@ -45,4 +45,52 @@ struct JournalUIBehaviorTests {
         let result = JournalDateNavigator.today(calendar: calendar, now: { fixedNow })
         #expect(result == calendar.startOfDay(for: fixedNow))
     }
+
+    @Test
+    func reorderMovesDraggedEntryBeforeTarget() {
+        let a = UUID()
+        let b = UUID()
+        let c = UUID()
+        let ids = [a, b, c]
+
+        let reordered = JournalEntryReorder.reorderedIDs(ids, draggedID: c, targetID: a)
+        #expect(reordered == [c, a, b])
+    }
+
+    @Test
+    func reorderMovesDraggedEntryAfterTargetWhenDraggingDownward() {
+        let a = UUID()
+        let b = UUID()
+        let c = UUID()
+        let ids = [a, b, c]
+
+        let reordered = JournalEntryReorder.reorderedIDs(ids, draggedID: a, targetID: c)
+        #expect(reordered == [b, c, a])
+    }
+
+    @Test
+    func reorderReturnsNilForInvalidMove() {
+        let a = UUID()
+        let b = UUID()
+        let ids = [a, b]
+
+        let sameTarget = JournalEntryReorder.reorderedIDs(ids, draggedID: a, targetID: a)
+        let missingDragged = JournalEntryReorder.reorderedIDs(ids, draggedID: UUID(), targetID: b)
+
+        #expect(sameTarget == nil)
+        #expect(missingDragged == nil)
+    }
+
+    @Test
+    func dragTokenRoundTrip() {
+        let id = UUID()
+        let token = JournalDragToken.encode(id: id)
+        let decoded = JournalDragToken.decode(token)
+        #expect(decoded == id)
+    }
+
+    @Test
+    func dragTokenRejectsArbitraryString() {
+        #expect(JournalDragToken.decode("not-a-token") == nil)
+    }
 }
