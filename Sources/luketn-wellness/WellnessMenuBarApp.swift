@@ -2,12 +2,12 @@ import SwiftUI
 
 @main
 struct WellnessMenuBarApp: App {
-    @StateObject private var appModel = AppModel()
+    @State private var appModel = AppModel()
 
     var body: some Scene {
         MenuBarExtra {
             MenuBarContentView()
-                .environmentObject(appModel)
+                .environment(appModel)
         } label: {
             MenuBarIconView(reminder: appModel.currentReminder)
         }
@@ -15,7 +15,7 @@ struct WellnessMenuBarApp: App {
 
         WindowGroup(id: "journal") {
             JournalEntryView()
-                .environmentObject(appModel)
+                .environment(appModel)
         }
         .windowResizability(.contentSize)
         .defaultSize(width: 560, height: 520)

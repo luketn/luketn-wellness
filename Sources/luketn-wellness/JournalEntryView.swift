@@ -7,7 +7,7 @@ struct JournalEntryView: View {
         var text: String
     }
 
-    @EnvironmentObject private var appModel: AppModel
+    @Environment(AppModel.self) private var appModel
     @Environment(\.dismiss) private var dismiss
     @State private var entries: [EntryItem] = [EntryItem(text: "")]
     @State private var selectedDate = Calendar.current.startOfDay(for: Date())

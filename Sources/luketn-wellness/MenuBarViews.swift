@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 struct MenuBarContentView: View {
-    @EnvironmentObject private var appModel: AppModel
+    @Environment(AppModel.self) private var appModel
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -64,7 +64,7 @@ struct MenuBarIconView: View {
             .onAppear {
                 updateGlowState()
             }
-            .onChange(of: reminder) { _ in
+            .onChange(of: reminder) { _, _ in
                 updateGlowState()
             }
             .accessibilityLabel("Wellness")

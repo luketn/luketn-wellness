@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import Observation
 import SwiftUI
 
 enum ReminderState: Equatable {
@@ -8,9 +9,10 @@ enum ReminderState: Equatable {
     case savor
 }
 
+@Observable
 @MainActor
-final class AppModel: ObservableObject {
-    @Published var currentReminder: ReminderState = .none
+final class AppModel {
+    var currentReminder: ReminderState = .none
 
     let gratitudePromptText = """
     Write one or more things you are grateful for today.
@@ -21,15 +23,38 @@ final class AppModel: ObservableObject {
 
     private let lastLoginKey = "wellness.lastLoginDate"
     private let sleepCenter = NSWorkspace.shared.notificationCenter
+    private let fileManager: FileManager
+    private let journalDirectoryURLValue: URL
+    private let nowProvider: () -> Date
+    private let observingSystemNotifications: Bool
 
-    init() {
-        NSApplication.shared.setActivationPolicy(.accessory)
-        setupSleepObservation()
+    init(
+        fileManager: FileManager = .default,
+        journalDirectoryURL: URL? = nil,
+        nowProvider: @escaping () -> Date = Date.init,
+        observeSystemNotifications: Bool = true,
+        setAccessoryActivationPolicy: Bool = true
+    ) {
+        self.fileManager = fileManager
+        self.journalDirectoryURLValue = journalDirectoryURL ?? FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("OneDrive")
+            .appendingPathComponent("GratitudeJournal")
+        self.nowProvider = nowProvider
+        self.observingSystemNotifications = observeSystemNotifications
+
+        if setAccessoryActivationPolicy {
+            NSApplication.shared.setActivationPolicy(.accessory)
+        }
+        if observeSystemNotifications {
+            setupSleepObservation()
+        }
         handleDailyLoginReminder()
     }
 
     deinit {
-        sleepCenter.removeObserver(self)
+        if observingSystemNotifications {
+            sleepCenter.removeObserver(self)
+        }
     }
 
     func clearReminder() {
@@ -74,7 +99,7 @@ final class AppModel: ObservableObject {
 
     func saveGratitudeEntries(_ entries: [String], on date: Date) throws -> URL {
         let directory = journalDirectoryURL
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
 
         let fileURL = journalFileURL(for: date)
         let body = markdownContent(for: entries, on: date)
@@ -97,7 +122,7 @@ final class AppModel: ObservableObject {
 
     private func handleDailyLoginReminder() {
         let defaults = UserDefaults.standard
-        let now = Date()
+        let now = nowProvider()
         let last = defaults.object(forKey: lastLoginKey) as? Date
 
         if last == nil || !Calendar.current.isDate(last!, inSameDayAs: now) {
@@ -107,9 +132,7 @@ final class AppModel: ObservableObject {
     }
 
     private var journalDirectoryURL: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("OneDrive")
-            .appendingPathComponent("GratitudeJournal")
+        journalDirectoryURLValue
     }
 
     private func journalFileURL(for date: Date) -> URL {
