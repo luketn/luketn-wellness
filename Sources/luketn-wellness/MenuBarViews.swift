@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct MenuBarContentView: View {
@@ -16,6 +17,7 @@ struct MenuBarContentView: View {
             Divider()
 
             Button("Open Gratitude Journal") {
+                NSApplication.shared.activate(ignoringOtherApps: true)
                 openWindow(id: "journal")
             }
 

@@ -13,10 +13,11 @@ struct WellnessMenuBarApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        Window("Gratitude Journal", id: "journal") {
+        WindowGroup(id: "journal") {
             JournalEntryView()
                 .environmentObject(appModel)
         }
         .windowResizability(.contentSize)
+        .defaultSize(width: 560, height: 520)
     }
 }

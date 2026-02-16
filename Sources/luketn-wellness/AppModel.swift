@@ -13,7 +13,7 @@ final class AppModel: ObservableObject {
     @Published var currentReminder: ReminderState = .none
 
     let gratitudePromptText = """
-    Write five things you are grateful for today.
+    Write one or more things you are grateful for today.
     Keep each one specific and personal, and include a short reason.
     """
 
@@ -42,24 +42,43 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func saveGratitudeEntries(_ entries: [String]) throws -> URL {
-        let directory = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("OneDrive")
-            .appendingPathComponent("GratitudeJournal")
+    func displayDateString(for date: Date) -> String {
+        Self.longDateFormatter.string(from: date)
+    }
 
+    func loadGratitudeEntries(on date: Date) -> [String] {
+        let fileURL = journalFileURL(for: date)
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            return []
+        }
+
+        guard let markdown = try? String(contentsOf: fileURL, encoding: .utf8) else {
+            return []
+        }
+
+        var loaded: [String] = []
+        for line in markdown.split(separator: "\n", omittingEmptySubsequences: true) {
+            let text = String(line).trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if let range = text.range(of: #"^\d+\.\s+"#, options: .regularExpression) {
+                loaded.append(String(text[range.upperBound...]))
+                continue
+            }
+
+            if text.hasPrefix("- ") {
+                loaded.append(String(text.dropFirst(2)))
+            }
+        }
+        return loaded
+    }
+
+    func saveGratitudeEntries(_ entries: [String], on date: Date) throws -> URL {
+        let directory = journalDirectoryURL
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
-        let dateText = Self.dayFormatter.string(from: Date())
-        let fileURL = directory.appendingPathComponent("journal-\(dateText).md")
-        let body = markdownContent(for: entries, on: Date())
-
-        if FileManager.default.fileExists(atPath: fileURL.path) {
-            let existing = (try? String(contentsOf: fileURL, encoding: .utf8)) ?? ""
-            let merged = existing.isEmpty ? body : "\(existing)\n\n\(body)"
-            try merged.write(to: fileURL, atomically: true, encoding: .utf8)
-        } else {
-            try body.write(to: fileURL, atomically: true, encoding: .utf8)
-        }
+        let fileURL = journalFileURL(for: date)
+        let body = markdownContent(for: entries, on: date)
+        try body.write(to: fileURL, atomically: true, encoding: .utf8)
 
         if currentReminder == .gratitude {
             currentReminder = .none
@@ -87,10 +106,20 @@ final class AppModel: ObservableObject {
         }
     }
 
+    private var journalDirectoryURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("OneDrive")
+            .appendingPathComponent("GratitudeJournal")
+    }
+
+    private func journalFileURL(for date: Date) -> URL {
+        let dateText = Self.dayFormatter.string(from: date)
+        return journalDirectoryURL.appendingPathComponent("journal-\(dateText).md")
+    }
+
     private func markdownContent(for entries: [String], on date: Date) -> String {
-        let timestamp = Self.timestampFormatter.string(from: date)
-        var content = "## Gratitude Entry (\(timestamp))\n\n"
-        content += "\(gratitudePromptText)\n\n"
+        var content = "# Gratitude Journal\n"
+        content += "## \(Self.longDateFormatter.string(from: date))\n\n"
 
         for (index, entry) in entries.enumerated() {
             content += "\(index + 1). \(entry.trimmingCharacters(in: .whitespacesAndNewlines))\n"
@@ -109,10 +138,10 @@ final class AppModel: ObservableObject {
         return formatter
     }()
 
-    private static let timestampFormatter: DateFormatter = {
+    private static let longDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
+        formatter.dateStyle = .full
+        formatter.timeStyle = .none
         return formatter
     }()
 }
