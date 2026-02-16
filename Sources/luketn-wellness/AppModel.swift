@@ -193,6 +193,10 @@ final class AppModel {
         return try persistEntriesSnapshot(entries, on: date)
     }
 
+    func saveGratitudeEntriesURL(on date: Date) -> URL {
+        journalFileURL(for: date)
+    }
+
     func persistEntriesSnapshot(_ entries: [String], on date: Date) throws -> URL {
         let directory = journalDirectoryURL
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -322,6 +326,10 @@ final class AppModel {
         journalDirectoryURLValue
     }
 
+    private var logDirectoryURL: URL {
+        journalDirectoryURL.appendingPathComponent(".log", isDirectory: true)
+    }
+
     private func journalFileURL(for date: Date) -> URL {
         let dateText = Self.dayFormatter.string(from: date)
         return journalDirectoryURL.appendingPathComponent("journal-\(dateText).md")
@@ -329,10 +337,11 @@ final class AppModel {
 
     private func changeLogFileURL(for date: Date) -> URL {
         let dateText = Self.dayFormatter.string(from: date)
-        return journalDirectoryURL.appendingPathComponent("journal-\(dateText).changelog.jsonl")
+        return logDirectoryURL.appendingPathComponent("journal-\(dateText).changelog.jsonl")
     }
 
     private func appendChangeLog(entries: [String], on date: Date) throws {
+        try fileManager.createDirectory(at: logDirectoryURL, withIntermediateDirectories: true)
         let fileURL = changeLogFileURL(for: date)
         var history: [ChangeLogRecord] = []
 

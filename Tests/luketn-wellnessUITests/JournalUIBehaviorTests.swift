@@ -11,8 +11,26 @@ struct JournalUIBehaviorTests {
     }
 
     @Test
+    func plainTabDoesNotMapToShortcutAction() {
+        let action = JournalShortcutInterpreter.action(forKeyCode: 48, modifiers: [])
+        #expect(action == nil)
+    }
+
+    @Test
+    func optionTabWithCommandDoesNotAddEntry() {
+        let action = JournalShortcutInterpreter.action(forKeyCode: 48, modifiers: [.option, .command])
+        #expect(action == nil)
+    }
+
+    @Test
     func commandEnterMapsToSaveAndCloseAction() {
         let action = JournalShortcutInterpreter.action(forKeyCode: 36, modifiers: [.command])
+        #expect(action == .saveAndClose)
+    }
+
+    @Test
+    func commandEnterStillMapsWithExtraModifiers() {
+        let action = JournalShortcutInterpreter.action(forKeyCode: 36, modifiers: [.command, .shift])
         #expect(action == .saveAndClose)
     }
 
@@ -36,6 +54,19 @@ struct JournalUIBehaviorTests {
 
         #expect(calendar.component(.day, from: next) == 17)
         #expect(calendar.component(.day, from: previous) == 15)
+    }
+
+    @Test
+    func dateNavigatorHandlesMonthBoundary() throws {
+        var components = DateComponents()
+        components.year = 2026
+        components.month = 2
+        components.day = 28
+        let calendar = Calendar(identifier: .gregorian)
+        let base = try #require(calendar.date(from: components))
+        let shifted = JournalDateNavigator.shiftedDay(from: base, by: 1, calendar: calendar)
+        #expect(calendar.component(.month, from: shifted) == 3)
+        #expect(calendar.component(.day, from: shifted) == 1)
     }
 
     @Test
@@ -69,6 +100,19 @@ struct JournalUIBehaviorTests {
     }
 
     @Test
+    func reorderKeepsAllIDsExactlyOnce() {
+        let a = UUID()
+        let b = UUID()
+        let c = UUID()
+        let d = UUID()
+        let ids = [a, b, c, d]
+
+        let reordered = JournalEntryReorder.reorderedIDs(ids, draggedID: b, targetID: d)
+        #expect(Set(reordered ?? []) == Set(ids))
+        #expect(reordered?.count == ids.count)
+    }
+
+    @Test
     func reorderReturnsNilForInvalidMove() {
         let a = UUID()
         let b = UUID()
@@ -92,5 +136,39 @@ struct JournalUIBehaviorTests {
     @Test
     func dragTokenRejectsArbitraryString() {
         #expect(JournalDragToken.decode("not-a-token") == nil)
+    }
+
+    @Test
+    func focusPlannerMovesFocusToNewEntryWhenRequested() {
+        let current = UUID()
+        let newID = UUID()
+        let next = JournalFocusPlanner.nextFocusAfterAdd(current: current, newEntryID: newID, focusNew: true)
+        #expect(next == newID)
+    }
+
+    @Test
+    func focusPlannerKeepsCurrentFocusWhenNotRequested() {
+        let current = UUID()
+        let newID = UUID()
+        let next = JournalFocusPlanner.nextFocusAfterAdd(current: current, newEntryID: newID, focusNew: false)
+        #expect(next == current)
+    }
+
+    @Test
+    func focusPlannerReturnsNilWhenNoCurrentAndNotRequested() {
+        let newID = UUID()
+        let next = JournalFocusPlanner.nextFocusAfterAdd(current: nil, newEntryID: newID, focusNew: false)
+        #expect(next == nil)
+    }
+
+    @Test
+    func entryValidationRejectsWhitespaceOnly() {
+        let valid = JournalEntryValidation.allVisibleEntriesFilled(["one", " two "])
+        let invalidWhitespace = JournalEntryValidation.allVisibleEntriesFilled(["one", "   "])
+        let invalidEmpty = JournalEntryValidation.allVisibleEntriesFilled([])
+
+        #expect(valid == true)
+        #expect(invalidWhitespace == false)
+        #expect(invalidEmpty == false)
     }
 }

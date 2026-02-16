@@ -57,3 +57,17 @@ enum JournalEntryReorder {
         return reordered
     }
 }
+
+enum JournalFocusPlanner {
+    static func nextFocusAfterAdd(current: UUID?, newEntryID: UUID, focusNew: Bool) -> UUID? {
+        focusNew ? newEntryID : current
+    }
+}
+
+enum JournalEntryValidation {
+    static func allVisibleEntriesFilled(_ entries: [String]) -> Bool {
+        !entries.isEmpty && entries.allSatisfy {
+            !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+}

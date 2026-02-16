@@ -81,11 +81,29 @@ struct RichTextEditor: NSViewRepresentable {
         func textDidBeginEditing(_ notification: Notification) {
             onBeginEditing?()
         }
+
+        func textDidEndEditing(_ notification: Notification) {
+            guard let textView else { return }
+            text = textView.attributedString()
+        }
     }
 }
 
 final class DropAwareTextView: NSTextView {
     var onDropDraggedEntry: ((UUID) -> Bool)?
+
+    override func keyDown(with event: NSEvent) {
+        let isTab = event.keyCode == 48
+        if isTab && !event.modifierFlags.contains(.option) {
+            if event.modifierFlags.contains(.shift) {
+                window?.selectPreviousKeyView(nil)
+            } else {
+                window?.selectNextKeyView(nil)
+            }
+            return
+        }
+        super.keyDown(with: event)
+    }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         if decodeDraggedID(from: sender.draggingPasteboard) != nil {

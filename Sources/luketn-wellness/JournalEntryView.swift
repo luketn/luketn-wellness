@@ -18,6 +18,8 @@ struct JournalEntryView: View {
     @State private var undoStack: [[String]] = []
     @State private var redoStack: [[String]] = []
     @State private var isApplyingHistory = false
+    @State private var lastAutosavedURL: URL?
+    @State private var hasPendingChanges = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -57,15 +59,6 @@ struct JournalEntryView: View {
                 .help("Jump to today")
 
                 Spacer()
-
-                Button {
-                    addEntry(focusNew: true)
-                } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.title3)
-                }
-                .buttonStyle(.plain)
-                .help("Add another entry... (Option-Tab Shortcut)")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
@@ -86,63 +79,61 @@ struct JournalEntryView: View {
             ScrollView {
                 VStack(spacing: 10) {
                     ForEach(entries) { entry in
-                        if let idx = index(for: entry.id) {
-                            HStack(alignment: .top, spacing: 8) {
-                                RichTextEditor(
-                                    text: entryBinding(at: idx),
-                                    isFocused: focusedEntryID == entries[idx].id,
-                                    onDropDraggedEntry: { draggedID in
-                                        reorderEntries(from: draggedID, to: entry.id)
-                                    },
-                                    onBeginEditing: {
-                                        focusedEntryID = entries[idx].id
-                                    }
-                                )
-                                .frame(minHeight: 130)
-
-                                VStack(spacing: 8) {
-                                    Button {
-                                        deleteEntry(id: entry.id)
-                                    } label: {
-                                        Image(systemName: "trash")
-                                            .font(.callout)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .help("Delete this entry")
-
-                                    Image(systemName: "line.3.horizontal")
-                                        .font(.callout)
-                                        .foregroundStyle(.secondary)
-                                        .padding(6)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 6)
-                                                .fill(.thinMaterial)
-                                        )
-                                        .help("Drag to reorder entries")
-                                        .draggable(JournalDragToken.encode(id: entry.id)) {
-                                            dragPreview(for: entry)
-                                        }
+                        HStack(alignment: .top, spacing: 8) {
+                            RichTextEditor(
+                                text: entryBinding(for: entry.id),
+                                isFocused: focusedEntryID == entry.id,
+                                onDropDraggedEntry: { draggedID in
+                                    reorderEntries(from: draggedID, to: entry.id)
+                                },
+                                onBeginEditing: {
+                                    focusedEntryID = entry.id
                                 }
-                                .padding(.top, 8)
-                            }
-                            .padding(8)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .fill(.regularMaterial)
                             )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(
-                                        focusedEntryID == entries[idx].id
-                                        ? Color.accentColor.opacity(0.55)
-                                        : Color.secondary.opacity(0.22),
-                                        lineWidth: 1
+                            .frame(minHeight: 130)
+
+                            VStack(spacing: 8) {
+                                Button {
+                                    deleteEntry(id: entry.id)
+                                } label: {
+                                    Image(systemName: "trash")
+                                        .font(.callout)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Delete this entry")
+
+                                Image(systemName: "line.3.horizontal")
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                                    .padding(6)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .fill(.thinMaterial)
                                     )
-                            )
-                            .dropDestination(for: String.self) { items, _ in
-                                let draggedID = items.first.flatMap(JournalDragToken.decode)
-                                return reorderEntries(from: draggedID, to: entry.id)
+                                    .help("Drag to reorder entries")
+                                    .draggable(JournalDragToken.encode(id: entry.id)) {
+                                        dragPreview(for: entry)
+                                    }
                             }
+                            .padding(.top, 8)
+                        }
+                        .padding(8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(.regularMaterial)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(
+                                    focusedEntryID == entry.id
+                                    ? Color.accentColor.opacity(0.55)
+                                    : Color.secondary.opacity(0.22),
+                                    lineWidth: 1
+                                )
+                        )
+                        .dropDestination(for: String.self) { items, _ in
+                            let draggedID = items.first.flatMap(JournalDragToken.decode)
+                            return reorderEntries(from: draggedID, to: entry.id)
                         }
                     }
                 }
@@ -150,10 +141,34 @@ struct JournalEntryView: View {
             }
 
             HStack {
-                Text(saveMessage)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                Button {
+                    addEntry(focusNew: true)
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.title3)
+                }
+                .buttonStyle(.plain)
+                .help("Add another entry... (Option-Tab Shortcut)")
+
+                if let lastAutosavedURL {
+                    HStack(spacing: 4) {
+                        Text("Autosaved:")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Button(lastAutosavedURL.lastPathComponent) {
+                            NSWorkspace.shared.activateFileViewerSelecting([lastAutosavedURL])
+                        }
+                        .buttonStyle(.link)
+                        .font(.footnote)
+                        .lineLimit(1)
+                        .help("Show in Finder")
+                    }
+                } else {
+                    Text(saveMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
 
                 Spacer()
 
@@ -199,7 +214,7 @@ struct JournalEntryView: View {
         }
         .onDisappear {
             removeKeyMonitor()
-            autosaveWorkItem?.cancel()
+            flushAndPersistImmediately()
         }
     }
 
@@ -210,18 +225,25 @@ struct JournalEntryView: View {
     private func persistSnapshotNow() {
         do {
             let url = try appModel.persistEntriesSnapshot(currentSnapshot(), on: selectedDate)
-            saveMessage = "Autosaved: \(url.lastPathComponent)"
+            lastAutosavedURL = url
+            saveMessage = ""
+            hasPendingChanges = false
         } catch {
             saveMessage = "Autosave failed: \(error.localizedDescription)"
+            lastAutosavedURL = nil
         }
     }
 
-    private func entryBinding(at index: Int) -> Binding<NSAttributedString> {
+    private func entryBinding(for id: UUID) -> Binding<NSAttributedString> {
         Binding(
-            get: { entries[index].text },
+            get: {
+                guard let idx = index(for: id) else { return NSAttributedString(string: "") }
+                return entries[idx].text
+            },
             set: { newValue in
+                guard let idx = index(for: id) else { return }
                 let previous = currentSnapshot()
-                entries[index].text = newValue
+                entries[idx].text = newValue
                 registerUserChange(previous: previous)
             }
         )
@@ -230,8 +252,15 @@ struct JournalEntryView: View {
     private func addEntry(focusNew: Bool) {
         let previous = currentSnapshot()
         entries.append(EntryItem(text: NSAttributedString(string: "")))
-        if focusNew {
-            focusedEntryID = entries.last?.id
+        if let newID = entries.last?.id {
+            let targetFocus = JournalFocusPlanner.nextFocusAfterAdd(
+                current: focusedEntryID,
+                newEntryID: newID,
+                focusNew: focusNew
+            )
+            if let targetFocus {
+                focusEntry(targetFocus)
+            }
         }
         registerUserChange(previous: previous)
     }
@@ -314,6 +343,7 @@ struct JournalEntryView: View {
         }
         redoStack = []
         saveMessage = ""
+        lastAutosavedURL = appModel.saveGratitudeEntriesURL(on: selectedDate)
         focusedEntryID = entries.first?.id
     }
 
@@ -329,8 +359,7 @@ struct JournalEntryView: View {
     }
 
     private func closeWindow() {
-        autosaveWorkItem?.cancel()
-        persistSnapshotNow()
+        flushAndPersistImmediately()
         NSApp.keyWindow?.performClose(nil)
         dismiss()
     }
@@ -359,11 +388,19 @@ struct JournalEntryView: View {
         }
     }
 
+    private func focusEntry(_ id: UUID) {
+        // Defer until next run loop so the new row exists in the view hierarchy.
+        DispatchQueue.main.async {
+            focusedEntryID = id
+        }
+    }
+
     private func registerUserChange(previous: [String]) {
         guard !isApplyingHistory else { return }
         let current = currentSnapshot()
         guard current != previous else { return }
 
+        hasPendingChanges = true
         undoStack.append(previous)
         if undoStack.count > 100 {
             undoStack = Array(undoStack.suffix(100))
@@ -379,6 +416,15 @@ struct JournalEntryView: View {
         }
         autosaveWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: workItem)
+    }
+
+    private func flushAndPersistImmediately() {
+        autosaveWorkItem?.cancel()
+        // Force NSTextView to commit current edits before snapshotting.
+        for window in NSApplication.shared.windows {
+            window.endEditing(for: nil)
+        }
+        persistSnapshotNow()
     }
 
     private func undoChange() {
@@ -413,5 +459,6 @@ struct JournalEntryView: View {
             entries = snapshot.map { EntryItem(text: NSAttributedString(string: $0)) }
         }
         focusedEntryID = entries.first?.id
+        hasPendingChanges = false
     }
 }
