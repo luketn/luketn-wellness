@@ -74,6 +74,29 @@ struct AppModelTests {
         #expect(model.currentReminder == .none)
     }
 
+    @Test
+    func changelogKeepsOnlyLastHundredSnapshots() throws {
+        let tempDirectory = try makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: tempDirectory) }
+
+        let model = AppModel(
+            journalDirectoryURL: tempDirectory,
+            observeSystemNotifications: false,
+            setAccessoryActivationPolicy: false,
+            showFirstLaunchPrompt: false
+        )
+
+        let baseDate = Date(timeIntervalSince1970: 1_740_000_000)
+        for i in 1...105 {
+            _ = try model.persistEntriesSnapshot(["entry-\(i)"], on: baseDate)
+        }
+
+        let history = model.loadChangeHistory(on: baseDate)
+        #expect(history.count == 100)
+        #expect(history.first == ["entry-6"])
+        #expect(history.last == ["entry-105"])
+    }
+
     private func makeTempDirectory() throws -> URL {
         let root = FileManager.default.temporaryDirectory
         let path = root.appendingPathComponent("wellness-tests-\(UUID().uuidString)", isDirectory: true)

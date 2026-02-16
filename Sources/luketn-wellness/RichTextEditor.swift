@@ -5,6 +5,7 @@ struct RichTextEditor: NSViewRepresentable {
     @Binding var text: NSAttributedString
     var isFocused: Bool = false
     var onDropDraggedEntry: ((UUID) -> Bool)? = nil
+    var onBeginEditing: (() -> Void)? = nil
 
     func makeCoordinator() -> Coordinator {
         Coordinator(text: $text)
@@ -40,6 +41,7 @@ struct RichTextEditor: NSViewRepresentable {
         textView.backgroundColor = .clear
         textView.onDropDraggedEntry = onDropDraggedEntry
         textView.textStorage?.setAttributedString(text)
+        context.coordinator.onBeginEditing = onBeginEditing
 
         context.coordinator.textView = textView
         return scrollView
@@ -52,6 +54,7 @@ struct RichTextEditor: NSViewRepresentable {
 
         context.coordinator.textView = textView
         textView.onDropDraggedEntry = onDropDraggedEntry
+        context.coordinator.onBeginEditing = onBeginEditing
         if !textView.attributedString().isEqual(to: text) {
             textView.textStorage?.setAttributedString(text)
         }
@@ -64,6 +67,7 @@ struct RichTextEditor: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         @Binding var text: NSAttributedString
         weak var textView: NSTextView?
+        var onBeginEditing: (() -> Void)?
 
         init(text: Binding<NSAttributedString>) {
             _text = text
@@ -72,6 +76,10 @@ struct RichTextEditor: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             guard let textView else { return }
             text = textView.attributedString()
+        }
+
+        func textDidBeginEditing(_ notification: Notification) {
+            onBeginEditing?()
         }
     }
 }

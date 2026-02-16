@@ -39,6 +39,11 @@ enum NotificationStateFilter: String, CaseIterable {
     }
 }
 
+private struct ChangeLogRecord: Codable {
+    let timestamp: String
+    let entries: [String]
+}
+
 @Observable
 @MainActor
 final class AppModel {
@@ -154,6 +159,11 @@ final class AppModel {
     }
 
     func loadGratitudeEntries(on date: Date) -> [String] {
+        let history = loadChangeHistory(on: date)
+        if let latest = history.last {
+            return latest
+        }
+
         let fileURL = journalFileURL(for: date)
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             return []
@@ -180,17 +190,42 @@ final class AppModel {
     }
 
     func saveGratitudeEntries(_ entries: [String], on date: Date) throws -> URL {
+        return try persistEntriesSnapshot(entries, on: date)
+    }
+
+    func persistEntriesSnapshot(_ entries: [String], on date: Date) throws -> URL {
         let directory = journalDirectoryURL
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
 
         let fileURL = journalFileURL(for: date)
-        let body = markdownContent(for: entries, on: date)
+        let markdownEntries = entries
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        let body = markdownContent(for: markdownEntries, on: date)
         try body.write(to: fileURL, atomically: true, encoding: .utf8)
+        try appendChangeLog(entries: entries, on: date)
 
         if currentReminder == .gratitude {
             currentReminder = .none
         }
         return fileURL
+    }
+
+    func loadChangeHistory(on date: Date) -> [[String]] {
+        let fileURL = changeLogFileURL(for: date)
+        guard fileManager.fileExists(atPath: fileURL.path) else { return [] }
+        guard let text = try? String(contentsOf: fileURL, encoding: .utf8) else { return [] }
+
+        var records: [[String]] = []
+        for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
+            if
+                let data = line.data(using: .utf8),
+                let decoded = try? JSONDecoder().decode(ChangeLogRecord.self, from: data)
+            {
+                records.append(decoded.entries)
+            }
+        }
+        return records
     }
 
     private func setupSleepObservation() {
@@ -292,6 +327,52 @@ final class AppModel {
         return journalDirectoryURL.appendingPathComponent("journal-\(dateText).md")
     }
 
+    private func changeLogFileURL(for date: Date) -> URL {
+        let dateText = Self.dayFormatter.string(from: date)
+        return journalDirectoryURL.appendingPathComponent("journal-\(dateText).changelog.jsonl")
+    }
+
+    private func appendChangeLog(entries: [String], on date: Date) throws {
+        let fileURL = changeLogFileURL(for: date)
+        var history: [ChangeLogRecord] = []
+
+        if fileManager.fileExists(atPath: fileURL.path),
+           let text = try? String(contentsOf: fileURL, encoding: .utf8) {
+            for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
+                if
+                    let data = line.data(using: .utf8),
+                    let decoded = try? JSONDecoder().decode(ChangeLogRecord.self, from: data)
+                {
+                    history.append(decoded)
+                }
+            }
+        }
+
+        if history.last?.entries == entries {
+            return
+        }
+
+        let newRecord = ChangeLogRecord(
+            timestamp: Self.isoDateFormatter.string(from: Date()),
+            entries: entries
+        )
+        history.append(newRecord)
+        if history.count > 100 {
+            history = Array(history.suffix(100))
+        }
+
+        let encoder = JSONEncoder()
+        var lines: [String] = []
+        lines.reserveCapacity(history.count)
+        for record in history {
+            let data = try encoder.encode(record)
+            if let line = String(data: data, encoding: .utf8) {
+                lines.append(line)
+            }
+        }
+        try lines.joined(separator: "\n").appending("\n").write(to: fileURL, atomically: true, encoding: .utf8)
+    }
+
     private func markdownContent(for entries: [String], on date: Date) -> String {
         var content = "# Gratitude Journal\n"
         content += "## \(Self.longDateFormatter.string(from: date))\n\n"
@@ -317,6 +398,12 @@ final class AppModel {
         let formatter = DateFormatter()
         formatter.dateStyle = .full
         formatter.timeStyle = .none
+        return formatter
+    }()
+
+    private static let isoDateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter
     }()
 }

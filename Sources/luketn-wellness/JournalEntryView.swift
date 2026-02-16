@@ -12,9 +12,12 @@ struct JournalEntryView: View {
     @State private var entries: [EntryItem] = [EntryItem(text: NSAttributedString(string: ""))]
     @State private var selectedDate = JournalDateNavigator.today()
     @State private var saveMessage = ""
-    @State private var isSaving = false
     @State private var keyMonitor: Any?
     @State private var focusedEntryID: UUID?
+    @State private var autosaveWorkItem: DispatchWorkItem?
+    @State private var undoStack: [[String]] = []
+    @State private var redoStack: [[String]] = []
+    @State private var isApplyingHistory = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -90,6 +93,9 @@ struct JournalEntryView: View {
                                     isFocused: focusedEntryID == entries[idx].id,
                                     onDropDraggedEntry: { draggedID in
                                         reorderEntries(from: draggedID, to: entry.id)
+                                    },
+                                    onBeginEditing: {
+                                        focusedEntryID = entries[idx].id
                                     }
                                 )
                                 .frame(minHeight: 130)
@@ -144,18 +150,34 @@ struct JournalEntryView: View {
             }
 
             HStack {
-                Button(isSaving ? "Saving..." : "Save Entry") {
-                    saveEntry(closeAfterSave: false)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(isSaving || !canSave)
-
-                Spacer()
-
                 Text(saveMessage)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
+
+                Spacer()
+
+                HStack(spacing: 10) {
+                    Button {
+                        undoChange()
+                    } label: {
+                        Image(systemName: "arrow.uturn.backward.circle.fill")
+                            .font(.title3)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(undoStack.isEmpty)
+                    .help("Undo")
+
+                    Button {
+                        redoChange()
+                    } label: {
+                        Image(systemName: "arrow.uturn.forward.circle.fill")
+                            .font(.title3)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(redoStack.isEmpty)
+                    .help("Redo")
+                }
             }
         }
         .padding(20)
@@ -177,51 +199,41 @@ struct JournalEntryView: View {
         }
         .onDisappear {
             removeKeyMonitor()
+            autosaveWorkItem?.cancel()
         }
     }
 
-    private var canSave: Bool {
-        !entries.isEmpty && entries.allSatisfy {
-            !$0.text.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
+    private func currentSnapshot() -> [String] {
+        entries.map { $0.text.string }
     }
 
-    private func saveEntry(closeAfterSave: Bool) {
-        isSaving = true
-        defer { isSaving = false }
-
-        guard canSave else {
-            saveMessage = "Fill in all visible entries or remove empty ones."
-            return
-        }
-
-        let cleanedEntries = entries
-            .map { $0.text.string.trimmingCharacters(in: .whitespacesAndNewlines) }
-
+    private func persistSnapshotNow() {
         do {
-            let url = try appModel.saveGratitudeEntries(cleanedEntries, on: selectedDate)
-            saveMessage = "Saved: \(url.path)"
-            loadEntriesForSelectedDate()
-            if closeAfterSave {
-                closeWindow()
-            }
+            let url = try appModel.persistEntriesSnapshot(currentSnapshot(), on: selectedDate)
+            saveMessage = "Autosaved: \(url.lastPathComponent)"
         } catch {
-            saveMessage = "Save failed: \(error.localizedDescription)"
+            saveMessage = "Autosave failed: \(error.localizedDescription)"
         }
     }
 
     private func entryBinding(at index: Int) -> Binding<NSAttributedString> {
         Binding(
             get: { entries[index].text },
-            set: { entries[index].text = $0 }
+            set: { newValue in
+                let previous = currentSnapshot()
+                entries[index].text = newValue
+                registerUserChange(previous: previous)
+            }
         )
     }
 
     private func addEntry(focusNew: Bool) {
+        let previous = currentSnapshot()
         entries.append(EntryItem(text: NSAttributedString(string: "")))
         if focusNew {
             focusedEntryID = entries.last?.id
         }
+        registerUserChange(previous: previous)
     }
 
     private func index(for id: UUID) -> Int? {
@@ -230,19 +242,23 @@ struct JournalEntryView: View {
 
     private func deleteEntry(id: UUID) {
         guard let idx = index(for: id) else { return }
+        let previous = currentSnapshot()
 
         if entries.count == 1 {
             entries[0].text = NSAttributedString(string: "")
             focusedEntryID = entries[0].id
+            registerUserChange(previous: previous)
             return
         }
 
         entries.remove(at: idx)
         let nextIndex = min(idx, entries.count - 1)
         focusedEntryID = entries[nextIndex].id
+        registerUserChange(previous: previous)
     }
 
     private func reorderEntries(from draggedID: UUID?, to targetID: UUID) -> Bool {
+        let previous = currentSnapshot()
         guard
             let draggedID,
             let reorderedIDs = JournalEntryReorder.reorderedIDs(
@@ -256,6 +272,7 @@ struct JournalEntryView: View {
 
         let byID = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
         entries = reorderedIDs.compactMap { byID[$0] }
+        registerUserChange(previous: previous)
         return true
     }
 
@@ -285,12 +302,18 @@ struct JournalEntryView: View {
     }
 
     private func loadEntriesForSelectedDate() {
-        let loaded = appModel.loadGratitudeEntries(on: selectedDate)
-        if loaded.isEmpty {
-            entries = [EntryItem(text: NSAttributedString(string: ""))]
+        autosaveWorkItem?.cancel()
+        let history = appModel.loadChangeHistory(on: selectedDate)
+        if let latest = history.last {
+            applySnapshot(latest)
+            undoStack = Array(history.dropLast())
         } else {
-            entries = loaded.map { EntryItem(text: NSAttributedString(string: $0)) }
+            let loaded = appModel.loadGratitudeEntries(on: selectedDate)
+            applySnapshot(loaded)
+            undoStack = []
         }
+        redoStack = []
+        saveMessage = ""
         focusedEntryID = entries.first?.id
     }
 
@@ -303,10 +326,11 @@ struct JournalEntryView: View {
     private func jumpToToday() {
         selectedDate = JournalDateNavigator.today()
         loadEntriesForSelectedDate()
-        saveMessage = ""
     }
 
     private func closeWindow() {
+        autosaveWorkItem?.cancel()
+        persistSnapshotNow()
         NSApp.keyWindow?.performClose(nil)
         dismiss()
     }
@@ -320,7 +344,7 @@ struct JournalEntryView: View {
                 addEntry(focusNew: true)
                 return nil
             case .saveAndClose:
-                saveEntry(closeAfterSave: true)
+                closeWindow()
                 return nil
             case nil:
                 return event
@@ -333,5 +357,61 @@ struct JournalEntryView: View {
             NSEvent.removeMonitor(keyMonitor)
             self.keyMonitor = nil
         }
+    }
+
+    private func registerUserChange(previous: [String]) {
+        guard !isApplyingHistory else { return }
+        let current = currentSnapshot()
+        guard current != previous else { return }
+
+        undoStack.append(previous)
+        if undoStack.count > 100 {
+            undoStack = Array(undoStack.suffix(100))
+        }
+        redoStack.removeAll(keepingCapacity: true)
+        scheduleAutosave()
+    }
+
+    private func scheduleAutosave() {
+        autosaveWorkItem?.cancel()
+        let workItem = DispatchWorkItem {
+            persistSnapshotNow()
+        }
+        autosaveWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: workItem)
+    }
+
+    private func undoChange() {
+        guard let previous = undoStack.popLast() else { return }
+        let current = currentSnapshot()
+        redoStack.append(current)
+        if redoStack.count > 100 {
+            redoStack = Array(redoStack.suffix(100))
+        }
+        applySnapshot(previous)
+        scheduleAutosave()
+    }
+
+    private func redoChange() {
+        guard let next = redoStack.popLast() else { return }
+        let current = currentSnapshot()
+        undoStack.append(current)
+        if undoStack.count > 100 {
+            undoStack = Array(undoStack.suffix(100))
+        }
+        applySnapshot(next)
+        scheduleAutosave()
+    }
+
+    private func applySnapshot(_ snapshot: [String]) {
+        isApplyingHistory = true
+        defer { isApplyingHistory = false }
+
+        if snapshot.isEmpty {
+            entries = [EntryItem(text: NSAttributedString(string: ""))]
+        } else {
+            entries = snapshot.map { EntryItem(text: NSAttributedString(string: $0)) }
+        }
+        focusedEntryID = entries.first?.id
     }
 }
