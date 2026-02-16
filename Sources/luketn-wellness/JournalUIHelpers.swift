@@ -64,6 +64,20 @@ enum JournalFocusPlanner {
     }
 }
 
+enum JournalFocusStealGuard {
+    static func shouldRequestProgrammaticFocus(
+        isFocused: Bool,
+        wasFocused: Bool,
+        isFirstResponder: Bool
+    ) -> Bool {
+        guard isFocused else { return false }
+        guard !isFirstResponder else { return false }
+        // Only request focus on a transition into focused state; otherwise
+        // the previously focused editor can keep stealing focus back.
+        return !wasFocused
+    }
+}
+
 enum JournalEntryValidation {
     static func allVisibleEntriesFilled(_ entries: [String]) -> Bool {
         !entries.isEmpty && entries.allSatisfy {

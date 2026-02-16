@@ -59,15 +59,22 @@ struct RichTextEditor: NSViewRepresentable {
             textView.textStorage?.setAttributedString(text)
         }
 
-        if isFocused, textView.window?.firstResponder !== textView {
+        let shouldRequestFocus = JournalFocusStealGuard.shouldRequestProgrammaticFocus(
+            isFocused: isFocused,
+            wasFocused: context.coordinator.wasFocused,
+            isFirstResponder: textView.window?.firstResponder === textView
+        )
+        if shouldRequestFocus {
             textView.window?.makeFirstResponder(textView)
         }
+        context.coordinator.wasFocused = isFocused
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         @Binding var text: NSAttributedString
         weak var textView: NSTextView?
         var onBeginEditing: (() -> Void)?
+        var wasFocused = false
 
         init(text: Binding<NSAttributedString>) {
             _text = text

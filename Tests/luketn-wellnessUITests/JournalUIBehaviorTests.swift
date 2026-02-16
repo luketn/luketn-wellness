@@ -162,6 +162,33 @@ struct JournalUIBehaviorTests {
     }
 
     @Test
+    func focusStealGuardRequestsFocusOnlyOnTransitionToFocused() {
+        let firstRenderNeedsFocus = JournalFocusStealGuard.shouldRequestProgrammaticFocus(
+            isFocused: true,
+            wasFocused: false,
+            isFirstResponder: false
+        )
+        #expect(firstRenderNeedsFocus == true)
+
+        let steadyStateDoesNotSteal = JournalFocusStealGuard.shouldRequestProgrammaticFocus(
+            isFocused: true,
+            wasFocused: true,
+            isFirstResponder: false
+        )
+        #expect(steadyStateDoesNotSteal == false)
+    }
+
+    @Test
+    func focusStealGuardSkipsWhenAlreadyFirstResponder() {
+        let shouldFocus = JournalFocusStealGuard.shouldRequestProgrammaticFocus(
+            isFocused: true,
+            wasFocused: false,
+            isFirstResponder: true
+        )
+        #expect(shouldFocus == false)
+    }
+
+    @Test
     func entryValidationRejectsWhitespaceOnly() {
         let valid = JournalEntryValidation.allVisibleEntriesFilled(["one", " two "])
         let invalidWhitespace = JournalEntryValidation.allVisibleEntriesFilled(["one", "   "])
