@@ -9,10 +9,13 @@ APP_DIR="$ROOT_DIR/dist/${PRODUCT_NAME}.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
-ZIP_PATH="$ROOT_DIR/dist/${PRODUCT_NAME}.app.zip"
+DMG_PATH="$ROOT_DIR/dist/${PRODUCT_NAME}.dmg"
+DMG_STAGE_DIR="$ROOT_DIR/dist/dmg-stage"
+ICONSET_DIR="$ROOT_DIR/dist/AppIcon.iconset"
+ICNS_PATH="$RESOURCES_DIR/AppIcon.icns"
 
 mkdir -p "$ROOT_DIR/dist"
-rm -rf "$APP_DIR" "$ZIP_PATH"
+rm -rf "$APP_DIR" "$DMG_PATH" "$DMG_STAGE_DIR" "$ICONSET_DIR"
 
 echo "Building release binary..."
 swift build -c release --package-path "$ROOT_DIR"
@@ -22,6 +25,10 @@ mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 
 cp "$BUILD_DIR/luketn-wellness" "$MACOS_DIR/$PRODUCT_NAME"
 chmod +x "$MACOS_DIR/$PRODUCT_NAME"
+
+echo "Generating app icon..."
+swift "$ROOT_DIR/scripts/generate_iconset.swift" "$ICONSET_DIR"
+iconutil -c icns "$ICONSET_DIR" -o "$ICNS_PATH"
 
 cat > "$CONTENTS_DIR/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -40,6 +47,8 @@ cat > "$CONTENTS_DIR/Info.plist" <<EOF
   <string>${PRODUCT_NAME}</string>
   <key>CFBundleDisplayName</key>
   <string>${PRODUCT_NAME}</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
@@ -57,9 +66,18 @@ EOF
 echo "Ad-hoc signing app bundle..."
 codesign --force --deep --sign - "$APP_DIR"
 
-echo "Zipping app..."
-ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" "$ZIP_PATH"
+echo "Creating DMG..."
+mkdir -p "$DMG_STAGE_DIR"
+cp -R "$APP_DIR" "$DMG_STAGE_DIR/${PRODUCT_NAME}.app"
+ln -s /Applications "$DMG_STAGE_DIR/Applications"
+
+hdiutil create \
+  -volname "$PRODUCT_NAME" \
+  -srcfolder "$DMG_STAGE_DIR" \
+  -ov \
+  -format UDZO \
+  "$DMG_PATH"
 
 echo "Done:"
 echo "  App: $APP_DIR"
-echo "  Zip: $ZIP_PATH"
+echo "  DMG: $DMG_PATH"
