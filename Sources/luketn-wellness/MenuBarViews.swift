@@ -27,6 +27,14 @@ struct MenuBarContentView: View {
                 get: { appModel.launchAtLoginEnabled },
                 set: { appModel.setLaunchAtLoginEnabled($0) }
             ))
+            .disabled(!appModel.launchAtLoginSupported)
+
+            if !appModel.launchAtLoginSupported {
+                Text("Install Wellness.app in /Applications to enable Start at Login.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             Toggle("Notify on State Change", isOn: Binding(
                 get: { appModel.notificationsEnabled },

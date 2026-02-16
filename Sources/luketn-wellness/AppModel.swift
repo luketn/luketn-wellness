@@ -53,6 +53,7 @@ final class AppModel {
         }
     }
     var launchAtLoginEnabled = false
+    var launchAtLoginSupported = true
     var notificationsEnabled = false
     var notificationStateFilter: NotificationStateFilter = .both
 
@@ -68,6 +69,7 @@ final class AppModel {
     private let notificationsEnabledKey = "wellness.notificationsEnabled"
     private let notificationFilterKey = "wellness.notificationStateFilter"
     private let sleepCenter = NSWorkspace.shared.notificationCenter
+    private let expectedBundleIdentifier = "com.luketn.wellness"
     private let fileManager: FileManager
     private let journalDirectoryURLValue: URL
     private let nowProvider: () -> Date
@@ -98,7 +100,7 @@ final class AppModel {
             setupSleepObservation()
         }
         loadPreferences()
-        refreshLaunchAtLoginStatus()
+        configureLaunchAtLoginSupportAndStatus()
         handleDailyLoginReminder()
         if showFirstLaunchPrompt {
             promptForLaunchAtLoginIfNeeded()
@@ -122,6 +124,11 @@ final class AppModel {
     }
 
     func setLaunchAtLoginEnabled(_ enabled: Bool) {
+        guard launchAtLoginSupported else {
+            launchAtLoginEnabled = false
+            return
+        }
+
         do {
             if enabled {
                 try SMAppService.mainApp.register()
@@ -257,7 +264,48 @@ final class AppModel {
         launchAtLoginEnabled = (status == .enabled)
     }
 
+    private func configureLaunchAtLoginSupportAndStatus() {
+        launchAtLoginSupported = supportsLaunchAtLogin()
+        guard launchAtLoginSupported else {
+            cleanupStaleLaunchAtLoginRegistration()
+            launchAtLoginEnabled = false
+            return
+        }
+        refreshLaunchAtLoginStatus()
+    }
+
+    private func supportsLaunchAtLogin() -> Bool {
+        guard let bundleIdentifier = Bundle.main.bundleIdentifier else {
+            return false
+        }
+        guard bundleIdentifier == expectedBundleIdentifier else {
+            return false
+        }
+        let bundleURL = Bundle.main.bundleURL.standardizedFileURL
+        guard bundleURL.pathExtension == "app" else {
+            return false
+        }
+        let path = bundleURL.path
+        let userApplications = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Applications", isDirectory: true)
+            .path
+        return path.hasPrefix("/Applications/") || path.hasPrefix("\(userApplications)/")
+    }
+
+    private func cleanupStaleLaunchAtLoginRegistration() {
+        let status = SMAppService.mainApp.status
+        guard status == .enabled || status == .requiresApproval else {
+            return
+        }
+        do {
+            try SMAppService.mainApp.unregister()
+        } catch {
+            // Ignore cleanup failures for unsupported/dev runtimes.
+        }
+    }
+
     private func promptForLaunchAtLoginIfNeeded() {
+        guard launchAtLoginSupported else { return }
         let defaults = UserDefaults.standard
         guard !defaults.bool(forKey: firstLaunchPromptShownKey) else { return }
         defaults.set(true, forKey: firstLaunchPromptShownKey)
