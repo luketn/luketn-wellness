@@ -10,7 +10,7 @@ struct JournalEntryView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.dismiss) private var dismiss
     @State private var entries: [EntryItem] = [EntryItem(text: "")]
-    @State private var selectedDate = Calendar.current.startOfDay(for: Date())
+    @State private var selectedDate = JournalDateNavigator.today()
     @State private var saveMessage = ""
     @State private var isSaving = false
     @State private var keyMonitor: Any?
@@ -170,16 +170,13 @@ struct JournalEntryView: View {
     }
 
     private func shiftDay(_ value: Int) {
-        guard let shifted = Calendar.current.date(byAdding: .day, value: value, to: selectedDate) else {
-            return
-        }
-        selectedDate = Calendar.current.startOfDay(for: shifted)
+        selectedDate = JournalDateNavigator.shiftedDay(from: selectedDate, by: value)
         loadEntriesForSelectedDate()
         saveMessage = ""
     }
 
     private func jumpToToday() {
-        selectedDate = Calendar.current.startOfDay(for: Date())
+        selectedDate = JournalDateNavigator.today()
         loadEntriesForSelectedDate()
         saveMessage = ""
     }
@@ -193,23 +190,16 @@ struct JournalEntryView: View {
         guard keyMonitor == nil else { return }
 
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            let isTab = event.keyCode == 48
-            let isEnter = event.keyCode == 36
-            let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            let isOptionTab = isTab && modifiers == .option
-            let isCommandEnter = isEnter && modifiers == .command
-
-            if isOptionTab {
+            switch JournalShortcutInterpreter.action(for: event) {
+            case .addEntry:
                 addEntry(focusNew: true)
                 return nil
-            }
-
-            if isCommandEnter {
+            case .saveAndClose:
                 saveEntry(closeAfterSave: true)
                 return nil
+            case nil:
+                return event
             }
-
-            return event
         }
     }
 

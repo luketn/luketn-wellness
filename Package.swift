@@ -12,5 +12,13 @@ let package = Package(
         .executableTarget(
             name: "luketn-wellness"
         ),
+        .testTarget(
+            name: "luketn-wellnessTests",
+            dependencies: ["luketn-wellness"]
+        ),
+        .testTarget(
+            name: "luketn-wellnessUITests",
+            dependencies: ["luketn-wellness"]
+        ),
     ]
 )
