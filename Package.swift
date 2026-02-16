@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
     name: "luketn-wellness",
     platforms: [
-        .macOS(.v14),
+        .macOS(.v26),
     ],
     targets: [
         .executableTarget(
