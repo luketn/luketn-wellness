@@ -62,10 +62,10 @@ struct MenuBarIconView: View {
     @State private var glow = false
 
     var body: some View {
-        Image(systemName: "leaf.circle.fill")
-            .symbolRenderingMode(.palette)
-            .foregroundStyle(primaryColor, .white.opacity(0.9))
-            .font(.system(size: 16, weight: .semibold))
+        Image(systemName: "leaf.fill")
+            .symbolRenderingMode(.monochrome)
+            .foregroundStyle(primaryColor)
+            .font(.system(size: 18, weight: .bold))
             .shadow(color: glowColor.opacity(glow ? 0.95 : 0.1), radius: glow ? 8 : 1)
             .scaleEffect(glow ? 1.12 : 1.0)
             .animation(animation, value: glow)

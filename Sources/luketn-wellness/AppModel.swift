@@ -43,7 +43,8 @@ final class AppModel {
         self.observingSystemNotifications = observeSystemNotifications
 
         if setAccessoryActivationPolicy {
-            NSApplication.shared.setActivationPolicy(.accessory)
+            // Use regular activation so the app appears in Command-Tab.
+            NSApplication.shared.setActivationPolicy(.regular)
         }
         if observeSystemNotifications {
             setupSleepObservation()
