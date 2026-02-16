@@ -21,6 +21,35 @@ struct MenuBarContentView: View {
                 openWindow(id: "journal")
             }
 
+            Divider()
+
+            Toggle("Start at Login", isOn: Binding(
+                get: { appModel.launchAtLoginEnabled },
+                set: { appModel.setLaunchAtLoginEnabled($0) }
+            ))
+
+            Toggle("Notify on State Change", isOn: Binding(
+                get: { appModel.notificationsEnabled },
+                set: { appModel.setNotificationsEnabled($0) }
+            ))
+
+            Menu("Notification State") {
+                ForEach(NotificationStateFilter.allCases, id: \.self) { option in
+                    Button {
+                        appModel.setNotificationStateFilter(option)
+                    } label: {
+                        HStack {
+                            Text(option.title)
+                            if appModel.notificationStateFilter == option {
+                                Spacer()
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            }
+            .disabled(!appModel.notificationsEnabled)
+
             if appModel.currentReminder == .savor {
                 Button("I savored something today") {
                     appModel.markSavorAcknowledged()
@@ -31,6 +60,12 @@ struct MenuBarContentView: View {
                 Button("Dismiss Reminder") {
                     appModel.clearReminder()
                 }
+            }
+
+            Divider()
+
+            Button("Quit Wellness") {
+                NSApplication.shared.terminate(nil)
             }
         }
         .frame(width: 280)

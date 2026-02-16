@@ -12,7 +12,8 @@ struct AppModelTests {
         let model = AppModel(
             journalDirectoryURL: tempDirectory,
             observeSystemNotifications: false,
-            setAccessoryActivationPolicy: false
+            setAccessoryActivationPolicy: false,
+            showFirstLaunchPrompt: false
         )
 
         var dateComponents = DateComponents()
@@ -36,7 +37,8 @@ struct AppModelTests {
         let model = AppModel(
             journalDirectoryURL: tempDirectory,
             observeSystemNotifications: false,
-            setAccessoryActivationPolicy: false
+            setAccessoryActivationPolicy: false,
+            showFirstLaunchPrompt: false
         )
 
         var dateComponents = DateComponents()
@@ -63,7 +65,8 @@ struct AppModelTests {
         let model = AppModel(
             journalDirectoryURL: tempDirectory,
             observeSystemNotifications: false,
-            setAccessoryActivationPolicy: false
+            setAccessoryActivationPolicy: false,
+            showFirstLaunchPrompt: false
         )
 
         model.currentReminder = .gratitude

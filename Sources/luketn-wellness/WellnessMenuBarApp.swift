@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 @main
@@ -19,5 +20,13 @@ struct WellnessMenuBarApp: App {
         }
         .windowResizability(.contentSize)
         .defaultSize(width: 560, height: 520)
+        .commands {
+        CommandGroup(replacing: .appTermination) {
+            Button("Close Window") {
+                NSApplication.shared.keyWindow?.performClose(nil)
+            }
+            .keyboardShortcut("q", modifiers: .command)
+        }
+    }
     }
 }
